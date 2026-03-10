@@ -1,0 +1,65 @@
+export default async function handler(req, res) {
+  // CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY chưa được cấu hình trên server' });
+
+  try {
+    const { content, count } = req.body;
+    if (!content || !count) return res.status(400).json({ error: 'Thiếu content hoặc count' });
+
+    const systemPrompt = `Bạn là hệ thống tạo quiz. CHỈ trả về JSON hợp lệ, KHÔNG markdown, KHÔNG text khác.
+Format bắt buộc: {"title":"Tên quiz ngắn gọn","questions":[{"type":"mcq","question":"Câu hỏi?","options":["A. Đáp án 1","B. Đáp án 2","C. Đáp án 3","D. Đáp án 4"],"answer":"A"},{"type":"tf","question":"Mệnh đề?","options":["Đúng","Sai"],"answer":"Đúng"}]}
+Tạo MIX: 70% mcq (A-B-C-D), 30% tf (Đúng/Sai). Câu hỏi bằng tiếng Việt. Đảm bảo đúng ${count} câu.`;
+
+    let userMessage;
+    if (content.type === 'pdf') {
+      userMessage = [
+        {
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data: content.data },
+        },
+        { type: 'text', text: `Tạo đúng ${count} câu hỏi quiz từ tài liệu này.` },
+      ];
+    } else {
+      userMessage = `Tạo đúng ${count} câu hỏi quiz từ nội dung:\n\n${content.data.slice(0, 7000)}`;
+    }
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
+      }),
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+      return res.status(400).json({ error: data.error.message });
+    }
+
+    const text = data.content
+      .map((i) => i.text || '')
+      .join('')
+      .replace(/```json?|```/g, '')
+      .trim();
+
+    const quiz = JSON.parse(text);
+    return res.status(200).json(quiz);
+  } catch (e) {
+    return res.status(500).json({ error: 'Lỗi tạo quiz: ' + e.message });
+  }
+}
