@@ -17,18 +17,7 @@ export default async function handler(req, res) {
 Format bắt buộc: {"title":"Tên quiz ngắn gọn","questions":[{"type":"mcq","question":"Câu hỏi?","options":["A. Đáp án 1","B. Đáp án 2","C. Đáp án 3","D. Đáp án 4"],"answer":"A"},{"type":"tf","question":"Mệnh đề?","options":["Đúng","Sai"],"answer":"Đúng"}]}
 Tạo MIX: 70% mcq (A-B-C-D), 30% tf (Đúng/Sai). Câu hỏi bằng tiếng Việt. Đảm bảo đúng ${count} câu.`;
 
-    let userMessage;
-    if (content.type === 'pdf') {
-      userMessage = [
-        {
-          type: 'document',
-          source: { type: 'base64', media_type: 'application/pdf', data: content.data },
-        },
-        { type: 'text', text: `Tạo đúng ${count} câu hỏi quiz từ tài liệu này.` },
-      ];
-    } else {
-      userMessage = `Tạo đúng ${count} câu hỏi quiz từ nội dung:\n\n${content.data.slice(0, 7000)}`;
-    }
+    const userMessage = `Tạo đúng ${count} câu hỏi quiz từ nội dung:\n\n${content.data.slice(0, 12000)}`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',

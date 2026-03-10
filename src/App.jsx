@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 import * as mammoth from 'mammoth';
+import * as pdfjsLib from 'pdfjs-dist';
 import {
   getQuizList, getQuizByCode, saveQuiz, deleteQuiz,
   getAdminPassword, setAdminPassword,
 } from './lib/supabase';
+
+// PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 // ── Theme ──
 const C = {
@@ -21,12 +25,17 @@ function genCode() {
 }
 
 async function readFile(file) {
-  if (file.name.endsWith('.pdf'))
-    return new Promise((res) => {
-      const r = new FileReader();
-      r.onload = (e) => res({ type: 'pdf', data: e.target.result.split(',')[1] });
-      r.readAsDataURL(file);
-    });
+  if (file.name.endsWith('.pdf')) {
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    let text = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map((item) => item.str).join(' ') + '\n';
+    }
+    return { type: 'text', data: text };
+  }
   if (file.name.endsWith('.docx')) {
     const buf = await file.arrayBuffer();
     const { value } = await mammoth.extractRawText({ arrayBuffer: buf });
@@ -45,7 +54,9 @@ async function genQuiz(content, count) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content, count }),
   });
-  const data = await res.json();
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch { throw new Error('Server trả về lỗi: ' + text.slice(0, 200)); }
   if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
   return data;
 }
