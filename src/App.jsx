@@ -95,8 +95,9 @@ const Btn = ({ onClick, children, disabled, ghost, danger, sm }) => (
   }}>{children}</button>
 );
 
-const Inp = ({ value, onChange, placeholder, type = 'text' }) => (
+const Inp = ({ value, onChange, placeholder, type = 'text', onEnter }) => (
   <input type={type} value={value} onChange={(e) => onChange(e.target.value)}
+    onKeyDown={(e) => { if (e.key === 'Enter' && onEnter) onEnter(); }}
     placeholder={placeholder} style={{
       background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`,
       borderRadius: 10, padding: '12px 16px', color: C.text,
@@ -121,10 +122,11 @@ export default function App() {
   const [answers, setAnswers] = useState({});
   const [result, setResult] = useState(null);
   const [pwInput, setPwInput] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState('');
   const [showChangePw, setShowChangePw] = useState(false);
   const [newPw, setNewPw] = useState('');
   const [pwMsg, setPwMsg] = useState('');
+  const [joining, setJoining] = useState(false);
 
   // Load fonts
   useEffect(() => {
@@ -197,9 +199,10 @@ export default function App() {
   async function handleJoin() {
     setErr('');
     if (!code.trim() || !uname.trim()) return setErr('Vui lòng nhập đầy đủ mã và tên');
+    setJoining(true);
     try {
       const qd = await getQuizByCode(code.trim().toUpperCase());
-      if (!qd) return setErr('Mã quiz không tồn tại hoặc đã bị xoá');
+      if (!qd) { setJoining(false); return setErr('Mã quiz không tồn tại hoặc đã bị xoá'); }
       setQuiz(qd);
       setQIdx(0);
       setAnswers({});
@@ -207,6 +210,7 @@ export default function App() {
     } catch (e) {
       setErr('Lỗi: ' + e.message);
     }
+    setJoining(false);
   }
 
   // ── Submit quiz ──
@@ -222,6 +226,7 @@ export default function App() {
 
   // ── Delete quiz ──
   async function handleDelQuiz(qCode) {
+    if (!window.confirm('Bạn có chắc muốn xoá quiz này? Hành động này không thể hoàn tác.')) return;
     try {
       await deleteQuiz(qCode);
       const list = await getQuizList();
@@ -233,8 +238,8 @@ export default function App() {
 
   function copyCode(c) {
     navigator.clipboard?.writeText(c);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopiedCode(c);
+    setTimeout(() => setCopiedCode(''), 2000);
   }
 
   // ══════════════════════════════════════════
@@ -271,7 +276,7 @@ export default function App() {
         </div>
         <h2 style={{ fontFamily: syne, fontSize: 22, fontWeight: 700, margin: '0 0 24px' }}>Admin Login</h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Inp value={pwInput} onChange={setPwInput} placeholder="Mật khẩu admin" type="password" />
+          <Inp value={pwInput} onChange={setPwInput} placeholder="Mật khẩu admin" type="password" onEnter={handleAdminLogin} />
           {err && <p style={{ color: C.red, fontSize: 13, margin: 0 }}>{err}</p>}
           <Btn onClick={handleAdminLogin}>Đăng nhập</Btn>
           <p style={{ color: C.muted, fontSize: 12, margin: 0, textAlign: 'center' }}>
@@ -304,7 +309,7 @@ export default function App() {
             <h3 style={{ fontFamily: syne, fontSize: 16, fontWeight: 700, margin: '0 0 12px' }}>Đổi mật khẩu Admin</h3>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 200 }}>
-                <Inp value={newPw} onChange={setNewPw} placeholder="Mật khẩu mới" type="password" />
+                <Inp value={newPw} onChange={setNewPw} placeholder="Mật khẩu mới" type="password" onEnter={handleChangePw} />
               </div>
               <Btn sm onClick={handleChangePw}>Lưu</Btn>
               <Btn sm ghost onClick={() => { setShowChangePw(false); setPwMsg(''); setNewPw(''); }}>Huỷ</Btn>
@@ -333,7 +338,7 @@ export default function App() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <Btn sm ghost onClick={() => copyCode(q.code)}>{copied ? 'Đã copy!' : 'Copy Mã'}</Btn>
+                  <Btn sm ghost onClick={() => copyCode(q.code)}>{copiedCode === q.code ? 'Đã copy!' : 'Copy Mã'}</Btn>
                   <Btn sm danger onClick={() => handleDelQuiz(q.code)}>Xoá</Btn>
                 </div>
               </Card>
@@ -413,7 +418,7 @@ export default function App() {
           <div style={{ fontFamily: syne, fontSize: 52, fontWeight: 800, color: C.amber, letterSpacing: 8 }}>{newCode}</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Btn onClick={() => copyCode(newCode)}>{copied ? '✓ Đã copy!' : 'Copy Mã'}</Btn>
+          <Btn onClick={() => copyCode(newCode)}>{copiedCode === newCode ? '✓ Đã copy!' : 'Copy Mã'}</Btn>
           <Btn ghost onClick={() => setSc('admin-dash')}>Về Dashboard</Btn>
         </div>
       </Card>
@@ -430,10 +435,10 @@ export default function App() {
         <h2 style={{ fontFamily: syne, fontSize: 22, fontWeight: 700, margin: '0 0 6px' }}>Làm Bài Quiz</h2>
         <p style={{ color: C.muted, margin: '0 0 24px', fontSize: 14 }}>Nhập mã quiz và tên để bắt đầu</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Inp value={code} onChange={(v) => setCode(v.toUpperCase())} placeholder="Mã quiz (VD: AB3X7K)" />
-          <Inp value={uname} onChange={setUname} placeholder="Tên của bạn" />
+          <Inp value={code} onChange={(v) => setCode(v.toUpperCase())} placeholder="Mã quiz (VD: AB3X7K)" onEnter={handleJoin} />
+          <Inp value={uname} onChange={setUname} placeholder="Tên của bạn" onEnter={handleJoin} />
           {err && <p style={{ color: C.red, fontSize: 13, margin: 0 }}>{err}</p>}
-          <Btn onClick={handleJoin}>Bắt đầu làm bài</Btn>
+          <Btn onClick={handleJoin} disabled={joining}>{joining ? '⏳ Đang tải quiz...' : 'Bắt đầu làm bài'}</Btn>
         </div>
       </Card>
     </Wrap>
@@ -495,7 +500,7 @@ export default function App() {
             <Btn ghost onClick={() => setQIdx((i) => i - 1)} disabled={qIdx === 0}>&larr; Trước</Btn>
             <div style={{ display: 'flex', gap: 8 }}>
               {qIdx < total - 1 && <Btn ghost onClick={() => setQIdx((i) => i + 1)}>Tiếp &rarr;</Btn>}
-              {qIdx === total - 1 && (
+              {(qIdx === total - 1 || Object.keys(answers).length === total) && (
                 <Btn onClick={handleSubmit}>
                   Nộp bài ({Object.keys(answers).length}/{total})
                 </Btn>
